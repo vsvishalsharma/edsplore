@@ -78,7 +78,14 @@ function generateTimeSlots(start, end, timezone) {
   return slots;
 }
 
-// Check if slot conflicts with existing events
+/**
+ * Check if the desired slot (startTime to endTime) overlaps with any busy intervals.
+ * Instead of simply checking for busy.length === 0, we explicitly check for overlap.
+ *
+ * @param {string} startTime - ISO string of the desired slot start time (in IST)
+ * @param {string} endTime - ISO string of the desired slot end time (in IST)
+ * @returns {Promise<boolean>} - Returns true if the slot is free.
+ */
 async function checkSlotAvailability(startTime, endTime) {
   try {
     const response = await calendar.freebusy.query({
@@ -89,8 +96,24 @@ async function checkSlotAvailability(startTime, endTime) {
         items: [{ id: CALENDAR_ID }]
       }
     });
+    const busy = response.data.calendars[CALENDAR_ID].busy;
+    console.log('Freebusy query for slot:', { startTime, endTime, busy });
 
-    return !response.data.calendars[CALENDAR_ID].busy.length;
+    // Create moment objects for our slot
+    const slotStart = moment(startTime);
+    const slotEnd = moment(endTime);
+
+    // Check for overlap with any busy interval
+    for (const interval of busy) {
+      const busyStart = moment(interval.start);
+      const busyEnd = moment(interval.end);
+      // If the slot overlaps with a busy interval, then it's not available.
+      if (slotStart.isBefore(busyEnd) && slotEnd.isAfter(busyStart)) {
+        console.log(`Overlap found with busy interval: ${interval.start} - ${interval.end}`);
+        return false;
+      }
+    }
+    return true;
   } catch (error) {
     console.error('Error checking availability:', error);
     return false;
@@ -105,24 +128,33 @@ app.get('/health', (req, res) => {
 // Check availability endpoint
 app.post('/check-availability', async (req, res) => {
   try {
-    const { timezone, startDate, endDate } = req.body;
+    // Extract dynamic variables from payload.
+    // Supports both top-level payload and nested under call.retell_llm_dynamic_variables.
+    const dynamicVars = req.body?.call?.retell_llm_dynamic_variables || req.body;
+    const timezone = dynamicVars.timeZone || dynamicVars.timezone;
+    const startDate = dynamicVars.startDate;
+    const endDate = dynamicVars.endDate;
 
-    console.log('Checking availability:', { timezone, startDate, endDate });
+    console.log('Checking availability with extracted variables:', { timezone, startDate, endDate });
 
     // Validate timezone
     if (!isValidUSTimezone(timezone)) {
       return res.status(400).json({ error: 'Invalid US timezone' });
     }
 
-    // Set default date range if not provided
+    // Set default date range if not provided.
+    // If startDate and endDate are provided and are the same, adjust the end time to the end of that day.
     const start = startDate ? moment(startDate) : moment();
-    const end = endDate ? moment(endDate) : moment().add(14, 'days');
+    let end = endDate ? moment(endDate) : moment().add(14, 'days');
+    if (startDate && endDate && start.isSame(end, 'day')) {
+      end = moment(endDate).endOf('day');
+    }
 
-    // Convert date range to IST for Google Calendar
+    // Convert date range to IST for Google Calendar queries
     const startIST = convertTime(start, timezone, IST_TIMEZONE);
     const endIST = convertTime(end, timezone, IST_TIMEZONE);
 
-    console.log('Converted times:', {
+    console.log('Converted times for calendar query:', {
       startIST: startIST.format(),
       endIST: endIST.format()
     });
@@ -136,8 +168,8 @@ app.post('/check-availability', async (req, res) => {
         items: [{ id: CALENDAR_ID }]
       }
     });
-
     const busySlots = busyResponse.data.calendars[CALENDAR_ID].busy;
+    console.log('Busy slots from calendar:', busySlots);
 
     // Generate all possible slots in user's timezone
     const allSlots = generateTimeSlots(start, end, timezone);
@@ -169,7 +201,6 @@ app.post('/check-availability', async (req, res) => {
       timezone,
       availableSlots: formattedSlots
     });
-
   } catch (error) {
     console.error('Error in check-availability:', error);
     res.status(500).json({ 
@@ -182,14 +213,19 @@ app.post('/check-availability', async (req, res) => {
 // Save booking endpoint
 app.post('/save-booking', async (req, res) => {
   try {
-    const { timezone, selectedDateTime } = req.body;
+    // Extract dynamic variables from payload.
+    // Supports both top-level payload and nested under call.retell_llm_dynamic_variables.
+    const dynamicVars = req.body?.call?.retell_llm_dynamic_variables || req.body;
+    const timezone = dynamicVars.timeZone || dynamicVars.timezone;
+    const selectedDateTime = dynamicVars.selectedDateTime || dynamicVars.selectedDateTime;
 
-    console.log('Received booking request:', {
+    console.log('Received booking request with extracted variables:', {
       timezone,
       selectedDateTime,
       parsedDateTime: moment(selectedDateTime).format()
     });
 
+    // Validate timezone
     if (!isValidUSTimezone(timezone)) {
       return res.status(400).json({ error: 'Invalid US timezone' });
     }
@@ -198,7 +234,7 @@ app.post('/save-booking', async (req, res) => {
     const startTimeIST = convertTime(selectedDateTime, timezone, IST_TIMEZONE);
     const endTimeIST = moment(startTimeIST).add(SLOT_DURATION, 'minutes');
 
-    console.log('Converted times:', {
+    console.log('Converted times for booking:', {
       originalDateTime: selectedDateTime,
       startTimeIST: startTimeIST.format(),
       endTimeIST: endTimeIST.format()
@@ -211,6 +247,10 @@ app.post('/save-booking', async (req, res) => {
     );
 
     if (!isAvailable) {
+      console.error('Slot not available during booking check:', {
+        startTimeIST: startTimeIST.toISOString(),
+        endTimeIST: endTimeIST.toISOString()
+      });
       return res.status(409).json({ error: 'Selected slot is no longer available' });
     }
 
@@ -246,7 +286,6 @@ app.post('/save-booking', async (req, res) => {
         timezone: IST_TIMEZONE
       }
     });
-
   } catch (error) {
     console.error('Detailed error in save-booking:', {
       message: error.message,

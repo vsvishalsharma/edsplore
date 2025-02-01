@@ -2,7 +2,7 @@
 const axios = require('axios');
 const moment = require('moment-timezone');
 
-const BASE_URL = 'http://localhost:3000';
+const BASE_URL = 'https://123d-2409-40c2-2057-65a8-343-a5b7-6735-9c94.ngrok-free.app';
 
 // Sample test data
 const testRequests = {
