@@ -80,7 +80,6 @@ function generateTimeSlots(start, end, timezone) {
 
 /**
  * Check if the desired slot (startTime to endTime) overlaps with any busy intervals.
- * Instead of simply checking for busy.length === 0, we explicitly check for overlap.
  *
  * @param {string} startTime - ISO string of the desired slot start time (in IST)
  * @param {string} endTime - ISO string of the desired slot end time (in IST)
@@ -128,6 +127,9 @@ app.get('/health', (req, res) => {
 // Check availability endpoint
 app.post('/check-availability', async (req, res) => {
   try {
+    // Log the raw payload for debugging purposes.
+    console.log('Received raw payload in /check-availability:', JSON.stringify(req.body, null, 2));
+    
     // Extract dynamic variables from payload.
     // Supports both top-level payload and nested under call.retell_llm_dynamic_variables.
     const dynamicVars = req.body?.call?.retell_llm_dynamic_variables || req.body;
@@ -213,21 +215,40 @@ app.post('/check-availability', async (req, res) => {
 // Save booking endpoint
 app.post('/save-booking', async (req, res) => {
   try {
+    // Log the raw payload for debugging purposes.
+    console.log('Received raw payload in /save-booking:', JSON.stringify(req.body, null, 2));
+
     // Extract dynamic variables from payload.
-    // Supports both top-level payload and nested under call.retell_llm_dynamic_variables.
+    // Supports both nested variables and top-level properties.
     const dynamicVars = req.body?.call?.retell_llm_dynamic_variables || req.body;
     const timezone = dynamicVars.timeZone || dynamicVars.timezone;
-    const selectedDateTime = dynamicVars.selectedDateTime || dynamicVars.selectedDateTime;
+
+    // Attempt to extract a full date/time string.
+    let selectedDateTime = dynamicVars.selectedDateTime || dynamicVars.selected_date_time;
+    // If not found, check if args has separate date and time fields.
+    if (!selectedDateTime && req.body.args) {
+      const { date, time } = req.body.args;
+      if (date && time) {
+        // Combine the date and time strings.
+        // Adjust the format string below if your input format differs.
+        selectedDateTime = moment.tz(`${date} ${time}`, "YYYY-MM-DD hh:mm A", timezone).format();
+      }
+    }
 
     console.log('Received booking request with extracted variables:', {
       timezone,
       selectedDateTime,
-      parsedDateTime: moment(selectedDateTime).format()
+      parsedDateTime: selectedDateTime ? moment(selectedDateTime).format() : 'undefined'
     });
 
     // Validate timezone
     if (!isValidUSTimezone(timezone)) {
       return res.status(400).json({ error: 'Invalid US timezone' });
+    }
+
+    // Validate selectedDateTime early
+    if (!selectedDateTime) {
+      return res.status(400).json({ error: 'No appointment time provided. Please select a valid time slot.' });
     }
 
     // Convert selected time to IST
