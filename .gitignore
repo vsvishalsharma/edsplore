@@ -1,0 +1,54 @@
+# Node.js dependencies
+node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Environment variables
+.env
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime files
+pids/
+*.pid
+*.seed
+*.pid.lock
+lib-cov/
+
+# Dependency directories
+node_modules/
+jspm_packages/
+
+# Debugging files
+.DS_Store
+Thumbs.db
+
+# Editor/IDE specific
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Build and output
+dist/
+build/
+coverage/
+
+# Docker
+docker-compose.override.yml
+docker-compose.dev.yml
+
+# Redis dump
+dump.rdb
+
+# Test and coverage reports
+.nyc_output/
+coverage/
