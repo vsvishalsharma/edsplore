@@ -1,0 +1,22 @@
+{
+  "name": "voice-server",
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Retell Voice Chat Server",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "node-fetch": "^2.7.0",
+    "retell-client-js-sdk": "^2.0.5",
+    "retell-sdk": "^4.19.0"
+  },
+  "devDependencies": {
+    "nodemon": "^2.0.22"
+  }
+}
